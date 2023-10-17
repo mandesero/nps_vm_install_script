@@ -1,51 +1,45 @@
 #!/bin/python3
 
-import sys
-
-START_IP_ADDRESS = "10.0.2.101"
-NAME = "n001"
-MAX_VMS = None
-# HOSTS_FILE_PATH = "/etc/hosts"
-HOSTS_FILE_PATH = "out"
-
-def make_hosts() -> None:
-    """
-    127.0.0.1	n001
-    10.0.2.101	n001 
-    10.0.2.102	n002
-    10.0.2.201	ccnode
-    """
-    with open(HOSTS_FILE_PATH, "+a") as hosts:
-        hosts.write(f"127.0.0.1 {NAME}\n")
-        parts = START_IP_ADDRESS.split('.')
-        for i in range(1, MAX_VMS + 1):
-            vm_ip = '.'.join(parts)
-            vm_name = 'n' + '0' * (3 - len(str(i))) + str(i)
-            hosts.write(f"{vm_ip} {vm_name}\n")
-            parts[-1] = str(int(parts[-1]) + 1)
+import argparse
+from config import *
+from tools import *
 
 
 def make_setup() -> None:
-    parts = START_IP_ADDRESS.split('.')
-    parts[-1] = str(int(parts[-1]) + int(NAME[-3:]))
-    vm_ip = '.'.join(parts)
-    make_hosts()
-    
+
+    set_host_name(HOST_NAME)
+    CURRENT_IP_ADDRESS = make_hosts(HOST_NAME)
+
+    if CURRENT_IP_ADDRESS:
+        make_netplan(CURRENT_IP_ADDRESS)
+    else:
+        raise RuntimeError
+
+    run("apt-get update")
+    run("apt-get upgrade -y")
+
+    run("apt-get install neovim -y")
+    run("apt-get install tcpdump -y")
+    run("apt-get install netcat -y")
+    run("apt-get install mininet -y")
+
+    run("apt-get install python3-pip -y")
+    run("pip install mininet")
+    run("pip install scapy")
+
+    run("systemctl enable --now systemd-resolved.service")
+    run("systemctl enable --now systemd-networkd.service")
+    run("sudo netplan apply")
+    run("systemctl restart NetworkManager")
 
 
 if __name__ == "__main__":
-    match len(sys.argv):
-        case 3:
-            if sys.argv[1] == '--name':
-                NAME = sys.argv[2]
-            elif sys.argv[1] == "--start-ip":
-                START_IP_ADDRESS = sys.argv[2]
-        case 5:
-            params = {
-                sys.argv[1]: sys.argv[2],
-                sys.argv[3]: sys.argv[4],
-            }
-            NAME = params['--name']
-            START_IP_ADDRESS = params['--start-ip']
-    MAX_VMS = 255 - int(START_IP_ADDRESS.split('.')[-1]) + 1
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--name', help='host_name')
+    parser.add_argument('--start-ip', help='IP-адрес')
+    parser.add_argument('--vms', help='VMs')
+    args = parser.parse_args()
+    HOST_NAME = args.name if args.name else HOST_NAME
+    START_IP_ADDRESS = args.start_ip if args.start_ip else START_IP_ADDRESS
+    MAX_VMS = args.vms if args.vms else MAX_VMS
     make_setup()
